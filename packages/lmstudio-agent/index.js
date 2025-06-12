@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import {spawnSync} from 'child_process';
 import fs from 'fs';
+import path from 'path';
 import process from 'process';
 
 const API_BASE = process.env.LM_BASE_URL || 'http://localhost:1234/v1';
@@ -68,14 +69,33 @@ function applyPatch(patch) {
   return 'patch aplicado com sucesso';
 }
 
+function loadProjectDocs() {
+  const docFiles = ['README.md', path.join('codex-rs', 'README.md')];
+  let docs = '';
+  for (const file of docFiles) {
+    try {
+      const content = fs.readFileSync(path.join(process.cwd(), file), 'utf8');
+      docs += `\n### ${file}\n` + content;
+    } catch {
+      // ignore missing files
+    }
+  }
+  return docs;
+}
+
 async function main() {
   const prompt = process.argv.slice(2).join(' ');
   if(!prompt){
     console.log('Uso: lmstudio-agent "sua instrução"');
     process.exit(1);
   }
+  const docs = loadProjectDocs();
+  let systemContent = 'Você é um agente de código que executa comandos e aplica patches usando funções.';
+  if(docs) {
+    systemContent += '\n\nContexto do projeto:\n' + docs;
+  }
   const messages = [
-    {role: 'system', content: 'Você é um agente de código que executa comandos e aplica patches usando funções.'},
+    {role: 'system', content: systemContent},
     {role: 'user', content: prompt}
   ];
   while(true){
