@@ -130,6 +130,15 @@ const cli = meow(
       free: { type: "boolean", description: "Retry redeeming free credits" },
       model: { type: "string", aliases: ["m"] },
       provider: { type: "string", aliases: ["p"] },
+      apiBase: {
+        type: "string",
+        description: "Override the base URL for the API",
+      },
+      local: {
+        type: "boolean",
+        description:
+          "Use a local LLM endpoint (defaults to http://localhost:11434/v1)",
+      },
       image: { type: "string", isMultiple: true, aliases: ["i"] },
       quiet: {
         type: "boolean",
@@ -293,6 +302,18 @@ const model = cli.flags.model ?? config.model;
 const imagePaths = cli.flags.image;
 const provider = cli.flags.provider ?? config.provider ?? "openai";
 
+const envBaseKey = `${provider.toUpperCase()}_BASE_URL`;
+if (cli.flags.apiBase) {
+  process.env[envBaseKey] = cli.flags.apiBase;
+}
+if (cli.flags.local && !process.env[envBaseKey]) {
+  process.env[envBaseKey] = "http://localhost:11434/v1";
+}
+const apiBase = process.env[envBaseKey];
+const isLocalEndpoint = Boolean(
+  apiBase && /^(https?:\/\/)?(localhost|127\.0\.0\.1)/.test(apiBase),
+);
+
 const client = {
   issuer: "https://auth.openai.com",
   client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
@@ -307,28 +328,8 @@ let savedTokens:
     }
   | undefined;
 
-// Try to load existing auth file if present
-try {
-  const home = os.homedir();
-  const authDir = path.join(home, ".codex");
-  const authFile = path.join(authDir, "auth.json");
-  if (fs.existsSync(authFile)) {
-    const data = JSON.parse(fs.readFileSync(authFile, "utf-8"));
-    savedTokens = data.tokens;
-    const lastRefreshTime = data.last_refresh
-      ? new Date(data.last_refresh).getTime()
-      : 0;
-    const expired = Date.now() - lastRefreshTime > 28 * 24 * 60 * 60 * 1000;
-    if (data.OPENAI_API_KEY && !expired) {
-      apiKey = data.OPENAI_API_KEY;
-    }
-  }
-} catch {
-  // ignore errors
-}
-
-if (cli.flags.login) {
-  apiKey = await fetchApiKey(client.issuer, client.client_id);
+// Try to load existing auth file if present (for remote OpenAI usage)
+if (!isLocalEndpoint) {
   try {
     const home = os.homedir();
     const authDir = path.join(home, ".codex");
@@ -336,37 +337,68 @@ if (cli.flags.login) {
     if (fs.existsSync(authFile)) {
       const data = JSON.parse(fs.readFileSync(authFile, "utf-8"));
       savedTokens = data.tokens;
+      const lastRefreshTime = data.last_refresh
+        ? new Date(data.last_refresh).getTime()
+        : 0;
+      const expired = Date.now() - lastRefreshTime > 28 * 24 * 60 * 60 * 1000;
+      if (data.OPENAI_API_KEY && !expired) {
+        apiKey = data.OPENAI_API_KEY;
+      }
     }
   } catch {
-    /* ignore */
+    // ignore errors
   }
-} else if (!apiKey) {
-  apiKey = await fetchApiKey(client.issuer, client.client_id);
-}
-// Ensure the API key is available as an environment variable for legacy code
-process.env["OPENAI_API_KEY"] = apiKey;
 
-if (cli.flags.free) {
-  // eslint-disable-next-line no-console
-  console.log(`${chalk.bold("codex --free")} attempting to redeem credits...`);
-  if (!savedTokens?.refresh_token) {
-    apiKey = await fetchApiKey(client.issuer, client.client_id, true);
-    // fetchApiKey includes credit redemption as the end of the flow
-  } else {
-    await maybeRedeemCredits(
-      client.issuer,
-      client.client_id,
-      savedTokens.refresh_token,
-      savedTokens.id_token,
-    );
+  if (cli.flags.login) {
+    apiKey = await fetchApiKey(client.issuer, client.client_id);
+    try {
+      const home = os.homedir();
+      const authDir = path.join(home, ".codex");
+      const authFile = path.join(authDir, "auth.json");
+      if (fs.existsSync(authFile)) {
+        const data = JSON.parse(fs.readFileSync(authFile, "utf-8"));
+        savedTokens = data.tokens;
+      }
+    } catch {
+      /* ignore */
+    }
+  } else if (!apiKey) {
+    apiKey = await fetchApiKey(client.issuer, client.client_id);
   }
+  process.env["OPENAI_API_KEY"] = apiKey;
+
+  if (cli.flags.free) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `${chalk.bold("codex --free")} attempting to redeem credits...`,
+    );
+    if (!savedTokens?.refresh_token) {
+      apiKey = await fetchApiKey(client.issuer, client.client_id, true);
+      // fetchApiKey includes credit redemption as the end of the flow
+    } else {
+      await maybeRedeemCredits(
+        client.issuer,
+        client.client_id,
+        savedTokens.refresh_token,
+        savedTokens.id_token,
+      );
+    }
+  }
+} else {
+  // Local endpoints do not require an API key
+  apiKey = process.env["OPENAI_API_KEY"] || "dummy";
+  process.env["OPENAI_API_KEY"] = apiKey;
 }
 
 // Set of providers that don't require API keys
 const NO_API_KEY_REQUIRED = new Set(["ollama"]);
 
 // Skip API key validation for providers that don't require an API key
-if (!apiKey && !NO_API_KEY_REQUIRED.has(provider.toLowerCase())) {
+if (
+  !apiKey &&
+  !isLocalEndpoint &&
+  !NO_API_KEY_REQUIRED.has(provider.toLowerCase())
+) {
   // eslint-disable-next-line no-console
   console.error(
     `\n${chalk.red(`Missing ${provider} API key.`)}\n\n` +
@@ -435,6 +467,7 @@ if (config.flexMode) {
 }
 
 if (
+  !isLocalEndpoint &&
   !(await isModelSupportedForResponses(provider, config.model)) &&
   (!provider || provider.toLowerCase() === "openai")
 ) {

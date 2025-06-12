@@ -1251,7 +1251,7 @@ export class AgentLoop {
               this.onLoading(false);
               return;
             }
-            // Handle OpenAI API quota errors
+            // Handle API quota errors from remote providers
             if (
               err instanceof Error &&
               (err as { code?: string }).code === "insufficient_quota"
@@ -1263,7 +1263,7 @@ export class AgentLoop {
                 content: [
                   {
                     type: "input_text",
-                    text: `\u26a0 Insufficient quota: ${err instanceof Error && err.message ? err.message.trim() : "No remaining quota."} Manage or purchase credits at https://platform.openai.com/account/billing.`,
+                    text: `\u26a0 Insufficient quota: ${err instanceof Error && err.message ? err.message.trim() : "No remaining quota."}`,
                   },
                 ],
               });

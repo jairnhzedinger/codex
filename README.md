@@ -77,7 +77,7 @@ Install globally:
 npm install -g @openai/codex
 ```
 
-Next, set your OpenAI API key as an environment variable:
+Next, set your OpenAI API key as an environment variable (skip this when using a local server):
 
 ```shell
 export OPENAI_API_KEY="your-api-key-here"
@@ -90,6 +90,18 @@ export OPENAI_API_KEY="your-api-key-here"
 > ```
 >
 > The CLI will automatically load variables from `.env` (via `dotenv/config`).
+
+If you're running a local OpenAI-compatible server you can skip the API key and
+use the `--local` flag or specify a custom endpoint with `--api-base`:
+
+```shell
+codex --local
+# or
+codex --api-base http://localhost:11434/v1
+```
+
+Alternatively set `CODEX_API_BASE` in your environment to configure the default
+endpoint.
 
 <details>
 <summary><strong>Use <code>--provider</code> to use other models</strong></summary>
@@ -119,6 +131,8 @@ export OPENAI_API_KEY="your-api-key-here"
 > ```shell
 > export <provider>_BASE_URL="https://your-provider-api-base-url"
 > ```
+
+> When running a local server you can use `CODEX_API_BASE` with the `--local` flag instead.
 
 </details>
 <br />
@@ -222,7 +236,7 @@ The hardening mechanism Codex uses depends on your OS:
 | `codex -q "..."`                     | Non-interactive "quiet mode"        | `codex -q --json "explain utils.ts"` |
 | `codex completion <bash\|zsh\|fish>` | Print shell completion script       | `codex completion bash`              |
 
-Key flags: `--model/-m`, `--approval-mode/-a`, `--quiet/-q`, and `--notify`.
+Key flags: `--model/-m`, `--approval-mode/-a`, `--quiet/-q`, `--notify`, `--local`, and `--api-base`.
 
 ---
 
