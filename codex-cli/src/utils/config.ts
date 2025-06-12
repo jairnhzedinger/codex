@@ -117,13 +117,26 @@ export function getApiKey(provider: string = "openai"): string | undefined {
     if (providerInfo.name === "Ollama") {
       return process.env[providerInfo.envKey] ?? "dummy";
     }
-    return process.env[providerInfo.envKey];
+    const key = process.env[providerInfo.envKey];
+    if (key) {
+      return key;
+    }
+    const base = getBaseUrl(provider);
+    if (base && /^(https?:\/\/)?(localhost|127\.0\.0\.1)/.test(base)) {
+      return "dummy";
+    }
+    return undefined;
   }
 
   // Checking `PROVIDER_API_KEY` feels more intuitive with a custom provider.
   const customApiKey = process.env[`${provider.toUpperCase()}_API_KEY`];
   if (customApiKey) {
     return customApiKey;
+  }
+
+  const base = getBaseUrl(provider);
+  if (base && /^(https?:\/\/)?(localhost|127\.0\.0\.1)/.test(base)) {
+    return "dummy";
   }
 
   // If the provider not found in the providers list and `OPENAI_API_KEY` is set, use it
