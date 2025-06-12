@@ -77,22 +77,11 @@ Install globally:
 npm install -g @openai/codex
 ```
 
-Next, set your OpenAI API key as an environment variable (skip this when using a local server):
+By default Codex uses a local LLM via the `ollama` provider running on
+`http://localhost:11434/v1`. To use a remote OpenAI‑compatible service instead,
+set your API key and pass `--provider openai`.
 
-```shell
-export OPENAI_API_KEY="your-api-key-here"
-```
-
-> **Note:** This command sets the key only for your current terminal session. You can add the `export` line to your shell's configuration file (e.g., `~/.zshrc`) but we recommend setting for the session. **Tip:** You can also place your API key into a `.env` file at the root of your project:
->
-> ```env
-> OPENAI_API_KEY=your-api-key-here
-> ```
->
-> The CLI will automatically load variables from `.env` (via `dotenv/config`).
-
-If you're running a local OpenAI-compatible server you can skip the API key and
-use the `--local` flag or specify a custom endpoint with `--api-base`:
+If your local server runs at a different endpoint, specify it with `--api-base`:
 
 ```shell
 codex --local
@@ -108,7 +97,7 @@ endpoint.
 
 > Codex also allows you to use other providers that support the OpenAI Chat Completions API. You can set the provider in the config file or use the `--provider` flag. The possible options for `--provider` are:
 >
-> - openai (default)
+> - ollama (default)
 > - openrouter
 > - azure
 > - gemini

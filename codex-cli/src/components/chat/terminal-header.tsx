@@ -22,7 +22,7 @@ const TerminalHeader: React.FC<TerminalHeaderProps> = ({
   version,
   PWD,
   model,
-  provider = "openai",
+  provider = "ollama",
   approvalPolicy,
   colorsByPolicy,
   agent,
