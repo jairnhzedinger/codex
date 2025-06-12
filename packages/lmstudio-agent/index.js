@@ -1,0 +1,108 @@
+#!/usr/bin/env node
+import {spawnSync} from 'child_process';
+import fs from 'fs';
+import process from 'process';
+
+const API_BASE = process.env.LM_BASE_URL || 'http://localhost:1234/v1';
+const MODEL = process.env.LM_MODEL || 'local-model';
+
+async function chat(messages) {
+  const res = await fetch(`${API_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: MODEL,
+      messages,
+      temperature: 0,
+      functions: [
+        {
+          name: 'cmd',
+          description: 'Executa um comando no shell',
+          parameters: {
+            type: 'object',
+            properties: {
+              command: { type: 'string' }
+            },
+            required: ['command']
+          }
+        },
+        {
+          name: 'apply_patch',
+          description: 'Aplica um patch git',
+          parameters: {
+            type: 'object',
+            properties: {
+              patch: { type: 'string' }
+            },
+            required: ['patch']
+          }
+        },
+        {
+          name: 'done',
+          description: 'Finaliza a sessão',
+          parameters: { type: 'object', properties: {} }
+        }
+      ]
+    })
+  });
+  if(!res.ok){
+    throw new Error(`Erro HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  return data.choices[0].message;
+}
+
+function runCommand(cmd) {
+  const result = spawnSync(cmd, {shell: true, encoding: 'utf8'});
+  return result.stdout + result.stderr;
+}
+
+function applyPatch(patch) {
+  const proc = spawnSync('git', ['apply', '--whitespace=nowarn'], {
+    input: patch,
+    encoding: 'utf8'
+  });
+  if(proc.status !== 0) {
+    return `erro ao aplicar patch: ${proc.stderr}`;
+  }
+  return 'patch aplicado com sucesso';
+}
+
+async function main() {
+  const prompt = process.argv.slice(2).join(' ');
+  if(!prompt){
+    console.log('Uso: lmstudio-agent "sua instrução"');
+    process.exit(1);
+  }
+  const messages = [
+    {role: 'system', content: 'Você é um agente de código que executa comandos e aplica patches usando funções.'},
+    {role: 'user', content: prompt}
+  ];
+  while(true){
+    const msg = await chat(messages);
+    if(msg.function_call){
+      const {name, arguments: args} = msg.function_call;
+      let result = '';
+      if(name === 'cmd'){
+        const {command} = JSON.parse(args);
+        result = runCommand(command);
+      } else if(name === 'apply_patch'){
+        const {patch} = JSON.parse(args);
+        result = applyPatch(patch);
+      } else if(name === 'done'){
+        console.log('Tarefa concluída.');
+        break;
+      }
+      messages.push({role: 'assistant', content: null, function_call: msg.function_call});
+      messages.push({role: 'function', name, content: result});
+      continue;
+    }
+    console.log(msg.content);
+    break;
+  }
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
